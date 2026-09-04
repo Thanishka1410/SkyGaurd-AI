@@ -1,0 +1,17 @@
+{
+  "model_type": "Lightweight Isolation Forest (Quantized)",
+  "target_parameters": [
+    "temperature",
+    "pressure",
+    "humidity"
+  ],
+  "input_dimension": 7,
+  "n_estimators": 50,
+  "max_samples": 128,
+  "export_path": "D:\\PROJECTS\\SIH\\ml\\artifacts\\skyguard_tier1_lite.onnx",
+  "file_size_bytes": 90447,
+  "file_size_kb": 88.33,
+  "inference_latency_ms": 7.5518,
+  "recommended_hardware": "Microcontroller (ESP32 / ARM Cortex-M4, >= 256KB RAM)",
+  "energy_consumption_estimate_mJ_per_infer": 0.12
+}
