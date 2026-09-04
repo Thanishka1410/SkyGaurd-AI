@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { StationMap } from '../components/StationMap';
 import { Station3DMap } from '../components/Station3DMap';
 import { SHAPChart } from '../components/SHAPChart';
+import { Tier1DetectionCard } from '../components/Tier1DetectionCard';
+import { Tier2RiskCard } from '../components/Tier2RiskCard';
+import { ShapBreakdown } from '../components/ShapBreakdown';
 import { ImputedValueCard } from '../components/ImputedValueCard';
 import { SpatialConsensusPanel } from '../components/SpatialConsensusPanel';
 import { 
@@ -32,6 +35,8 @@ interface DashboardPageProps {
   is3DMode?: boolean;
 }
 
+import { useSkyGuardStore, CANONICAL_STATIONS } from '../store/useSkyGuardStore';
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   stations,
   liveReadings,
@@ -40,26 +45,96 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigateTab,
   is3DMode: initial3DMode = true
 }) => {
-  const [selectedStationId, setSelectedStationId] = useState<string>('AWS_GOA_04');
+  const { readingHistory, isSimulating } = useSkyGuardStore();
+  const [selectedStationId, setSelectedStationId] = useState<string>('AWS-01');
   const [is3DView, setIs3DView] = useState<boolean>(initial3DMode);
 
-  const selectedStation = stations.find(s => s.station_id === selectedStationId) || stations[3] || stations[0];
+  const selectedStation = stations.find(s => s.station_id === selectedStationId || s.id === selectedStationId) || stations[0] || CANONICAL_STATIONS[0];
   const activeAnomaliesCount = anomalies.filter(a => a.is_anomaly).length;
 
-  // Mock trend history for selected station to render trend line chart matching screenshot
-  const trendData = [
-    { time: '09:12', temp: 28.1, press: 1011.0, hum: 70 },
-    { time: '09:20', temp: 28.2, press: 1011.2, hum: 71 },
-    { time: '09:28', temp: 28.4, press: 1011.0, hum: 72 },
-    { time: '09:36', temp: 28.5, press: 1010.9, hum: 73 },
-    { time: '09:42', temp: selectedStation.last_reading?.temperature || 28.7, press: selectedStation.last_reading?.pressure || 1010.8, hum: selectedStation.last_reading?.humidity || 74 },
-  ];
+  // Dynamic System Health calculation across station network
+  const overallHealth = Math.round(
+    stations.reduce((acc, s) => acc + (s.health?.overall_health_score ?? 95), 0) / Math.max(1, stations.length)
+  );
+  const healthStatusLabel = overallHealth >= 90 ? 'OPTIMAL' : overallHealth >= 75 ? 'DEGRADED' : 'CRITICAL';
+  const healthColorClass = overallHealth >= 90 ? 'text-emerald-700' : overallHealth >= 75 ? 'text-amber-700' : 'text-red-700';
+  const healthDotClass = overallHealth >= 90 ? 'bg-emerald-600' : overallHealth >= 75 ? 'bg-amber-600' : 'bg-red-600';
 
-  const currentTemp = selectedStation.last_reading?.temperature ?? 28.7;
-  const currentPress = selectedStation.last_reading?.pressure ?? 1010.8;
-  const currentHum = selectedStation.last_reading?.humidity ?? 74;
+  // Dynamic Composite Risk Level calculation
+  const compositeRisk = disasterRisks?.composite_risk_level || 'LOW';
+  const riskLabel = compositeRisk === 'LOW' ? 'NO THREAT' : compositeRisk === 'MEDIUM' ? 'ELEVATED RISK' : compositeRisk === 'HIGH' ? 'HIGH RISK' : 'SEVERE HAZARD';
+  const riskColorClass = compositeRisk === 'LOW' ? 'text-emerald-700' : compositeRisk === 'MEDIUM' ? 'text-amber-700' : 'text-red-700';
+  const riskDotClass = compositeRisk === 'LOW' ? 'bg-emerald-600' : compositeRisk === 'MEDIUM' ? 'bg-amber-600' : 'bg-red-600';
 
-  const activeAnomalyRecord = anomalies.find(a => a.station_id === selectedStationId && a.is_anomaly) || anomalies[0];
+  const currentLiveReading = liveReadings.find(r => r.station_id === selectedStation.station_id || r.station_id === selectedStation.id);
+
+  const currentTemp = currentLiveReading?.temperature ?? selectedStation.last_reading?.temperature ?? 28.5;
+  const currentPress = currentLiveReading?.pressure ?? selectedStation.last_reading?.pressure ?? 1012.0;
+  const currentHum = currentLiveReading?.humidity ?? selectedStation.last_reading?.humidity ?? 80.0;
+  const currentWind = currentLiveReading?.wind_speed ?? 12.0;
+  const currentRain = currentLiveReading?.rainfall ?? 0.0;
+
+  // Filter reading history dynamically for selected station
+  const stationHistory = readingHistory.filter(
+    r => r.station_id === selectedStation.station_id || r.station_id === selectedStation.id
+  );
+
+  // Dynamic Parameter Trend Deltas
+  const prevReading = stationHistory.length >= 2 ? stationHistory[stationHistory.length - 2] : null;
+  const tempDelta = prevReading ? currentTemp - prevReading.temperature : 0.0;
+  const pressDelta = prevReading ? currentPress - prevReading.pressure : 0.0;
+  const humDelta = prevReading ? currentHum - prevReading.humidity : 0.0;
+
+  const formatDeltaStr = (val: number, unit: string) => {
+    if (Math.abs(val) < 0.01) return `0.0${unit}`;
+    const sign = val > 0 ? '+' : '';
+    return `${sign}${val.toFixed(1)}${unit}`;
+  };
+
+  const trendData = stationHistory.length >= 1
+    ? stationHistory.slice(-15).map(r => ({
+        time: r.timestamp ? new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Live',
+        temp: r.temperature,
+        press: r.pressure,
+        hum: r.humidity
+      }))
+    : [
+        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), temp: currentTemp, press: currentPress, hum: currentHum }
+      ];
+
+  // Active Anomaly Evaluation for Selected Station
+  const selectedStationAnom = anomalies.find(a => (a.station_id === selectedStation.station_id || a.station_id === selectedStation.id) && a.is_anomaly);
+  const currentEval = currentLiveReading?.anomaly_evaluation;
+  const isAnomActive = Boolean(selectedStationAnom || currentEval?.is_anomaly);
+
+  const rawScore = selectedStationAnom ? Math.abs(selectedStationAnom.isolation_forest_score || 0.35) : (currentEval ? Math.abs(currentEval.isolation_forest_score || 0) : 0);
+  const displayAnomalyScore = Number(Math.min(1.0, isAnomActive ? Math.max(0.45, rawScore) : 0.0).toFixed(2));
+  const anomalyScoreOffset = Math.round(125 * (1 - displayAnomalyScore));
+
+  const rootCauseText = (selectedStationAnom?.root_cause || currentEval?.root_cause || (currentLiveReading?.injected_fault_type !== 'NONE' ? currentLiveReading?.injected_fault_type : 'NONE') || '').toLowerCase();
+  const isTempFlagged = isAnomActive && (rootCauseText.includes('temp') || rootCauseText.includes('spike'));
+  const isPressFlagged = isAnomActive && (rootCauseText.includes('press') || rootCauseText.includes('drop'));
+  const isHumFlagged = isAnomActive && (rootCauseText.includes('hum') || rootCauseText.includes('moisture'));
+
+  const detectionTimestamp = selectedStationAnom?.timestamp 
+    ? new Date(selectedStationAnom.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' IST'
+    : currentLiveReading?.timestamp
+    ? new Date(currentLiveReading.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' IST'
+    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' IST';
+
+  const confidencePct = selectedStationAnom 
+    ? Math.round(selectedStationAnom.confidence * 100) 
+    : currentEval 
+    ? Math.round(currentEval.confidence * 100) 
+    : 100;
+
+  const reasonText = selectedStationAnom
+    ? `Flagged ${selectedStationAnom.root_cause} with score ${selectedStationAnom.isolation_forest_score.toFixed(3)}.`
+    : currentEval && currentEval.is_anomaly
+    ? `Live stream detected ${currentEval.root_cause || 'anomaly'}.`
+    : 'All sensor readings within expected operational range.';
+
+  const activeAnomalyRecord = selectedStationAnom || anomalies[0];
 
   return (
     <div className="space-y-6 pb-12 font-sans text-slate-900">
@@ -70,42 +145,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Card 1: SYSTEM OVERVIEW */}
         <div className="luxury-card p-5 relative overflow-hidden bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="space-y-1 relative z-10">
-            <span className="text-[11px] font-mono font-bold text-blue-600 uppercase tracking-wider block">
+            <span className="text-[11px] font-mono font-extrabold text-sky-700 uppercase tracking-widest block">
               SYSTEM OVERVIEW
             </span>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-display tracking-tight leading-tight">
-              ATMOSPHERIC INTELLIGENCE
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 font-display tracking-wider leading-tight uppercase">
+              ATMOSPHERIC COMMAND
             </h2>
-            <p className="text-xs text-slate-500 font-sans leading-relaxed mt-1">
-              Real-time AWS Monitoring, Anomaly Detection & Disaster Risk Intelligence
+            <p className="text-xs text-slate-600 font-sans leading-relaxed mt-1">
+              Real-time AWS Monitoring, ML Anomaly Detection & Disaster Risk Intelligence
             </p>
           </div>
-          {/* Faint Background Shield Logo Watermark */}
-          <ShieldCheck className="absolute -bottom-2 -right-2 w-24 h-24 text-blue-50/60 pointer-events-none stroke-[1]" />
+          <ShieldCheck className="absolute -bottom-2 -right-2 w-24 h-24 text-sky-500/10 pointer-events-none stroke-[1]" />
         </div>
 
         {/* Card 2: ACTIVE STATIONS */}
         <div className="luxury-card p-5 bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-mono font-extrabold text-slate-500 uppercase tracking-widest">
               ACTIVE STATIONS
             </span>
-            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+            <div className="p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700">
               <Radio className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-sans">
-              0{stations.length}
+            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
+              {stations.length < 10 ? `0${stations.length}` : stations.length}
             </div>
-            <div className="text-xs font-semibold text-emerald-600 flex items-center space-x-1 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>100% Operational</span>
+            <div className="text-xs font-semibold text-emerald-700 flex items-center space-x-1.5 mt-1 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+              <span>100% OPERATIONAL</span>
             </div>
           </div>
-          {/* Sparkline */}
           <div className="mt-3 h-6 w-full opacity-80">
-            <svg className="w-full h-full text-blue-500" viewBox="0 0 100 25" fill="none">
+            <svg className="w-full h-full text-sky-600" viewBox="0 0 100 25" fill="none">
               <path d="M0 20 Q 25 15, 50 18 T 100 8" stroke="#0284c7" strokeWidth="2" fill="none" />
             </svg>
           </div>
@@ -114,27 +187,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Card 3: ACTIVE ANOMALIES */}
         <div className="luxury-card p-5 bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-mono font-extrabold text-slate-500 uppercase tracking-widest">
               ACTIVE ANOMALIES
             </span>
-            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+            <div className="p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700">
               <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-sans">
+            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
               0{activeAnomaliesCount}
             </div>
-            <div className={`text-xs font-semibold flex items-center space-x-1 mt-1 ${
-              activeAnomaliesCount > 0 ? 'text-red-600' : 'text-emerald-600'
+            <div className={`text-xs font-semibold flex items-center space-x-1.5 mt-1 font-mono ${
+              activeAnomaliesCount > 0 ? 'text-red-700' : 'text-emerald-700'
             }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${activeAnomaliesCount > 0 ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
-              <span>{activeAnomaliesCount > 0 ? `${activeAnomaliesCount} Flagged` : 'All Systems Nominal'}</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${activeAnomaliesCount > 0 ? 'bg-red-600 animate-pulse' : 'bg-emerald-600'}`}></span>
+              <span>{activeAnomaliesCount > 0 ? `${activeAnomaliesCount} FLAGGED` : 'ALL NOMINAL'}</span>
             </div>
           </div>
-          {/* Sparkline */}
           <div className="mt-3 h-6 w-full opacity-80">
-            <svg className="w-full h-full text-blue-500" viewBox="0 0 100 25" fill="none">
+            <svg className="w-full h-full text-sky-600" viewBox="0 0 100 25" fill="none">
               <path d="M0 22 Q 30 20, 60 12 T 100 18" stroke="#0284c7" strokeWidth="2" fill="none" />
             </svg>
           </div>
@@ -143,25 +215,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Card 4: SYSTEM HEALTH */}
         <div className="luxury-card p-5 bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-mono font-extrabold text-slate-500 uppercase tracking-widest">
               SYSTEM HEALTH
             </span>
-            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-              <Gauge className="w-4 h-4" />
+            <div className="p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700">
+              <Activity className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-sans">
-              100%
+            <div className="text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
+              {overallHealth}%
             </div>
-            <div className="text-xs font-semibold text-emerald-600 flex items-center space-x-1 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>Excellent</span>
+            <div className={`text-xs font-semibold flex items-center space-x-1.5 mt-1 font-mono ${healthColorClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${healthDotClass}`}></span>
+              <span>{healthStatusLabel}</span>
             </div>
           </div>
-          {/* Sparkline */}
           <div className="mt-3 h-6 w-full opacity-80">
-            <svg className="w-full h-full text-blue-500" viewBox="0 0 100 25" fill="none">
+            <svg className="w-full h-full text-sky-600" viewBox="0 0 100 25" fill="none">
               <path d="M0 18 Q 30 10, 70 15 T 100 5" stroke="#0284c7" strokeWidth="2" fill="none" />
             </svg>
           </div>
@@ -170,25 +241,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         {/* Card 5: CURRENT RISK */}
         <div className="luxury-card p-5 bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-mono font-extrabold text-slate-500 uppercase tracking-widest">
               CURRENT RISK
             </span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+            <div className="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">
               <ShieldAlert className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-3xl font-extrabold text-emerald-600 tracking-tight font-sans">
-              {disasterRisks?.composite_risk_level || 'LOW'}
+            <div className={`text-3xl font-extrabold tracking-tight font-mono ${riskColorClass}`}>
+              {compositeRisk}
             </div>
-            <div className="text-xs font-semibold text-emerald-600 flex items-center space-x-1 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>No Immediate Threat</span>
+            <div className={`text-xs font-semibold flex items-center space-x-1.5 mt-1 font-mono ${riskColorClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${riskDotClass}`}></span>
+              <span>{riskLabel}</span>
             </div>
           </div>
-          {/* Sparkline */}
           <div className="mt-3 h-6 w-full opacity-80">
-            <svg className="w-full h-full text-emerald-500" viewBox="0 0 100 25" fill="none">
+            <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 25" fill="none">
               <path d="M0 15 Q 40 22, 70 12 T 100 20" stroke="#059669" strokeWidth="2" fill="none" />
             </svg>
           </div>
@@ -200,35 +270,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* ROW 2: LIVE AWS NETWORK MAP (~60%) + SELECTED STATION TELEMETRY (~40%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Left Map Panel (~60% -> 7 columns on lg grid) */}
+        {/* Left Map Panel */}
         <div className="lg:col-span-7">
           {is3DView ? (
             <Station3DMap
               stations={stations}
-              selectedStationId={selectedStationId}
+              selectedStationId={selectedStation.station_id}
               onSelectStation={setSelectedStationId}
               onToggle3D={() => setIs3DView(false)}
             />
           ) : (
             <StationMap
               stations={stations}
-              selectedStationId={selectedStationId}
+              selectedStationId={selectedStation.station_id}
               onSelectStation={setSelectedStationId}
               onToggle3D={() => setIs3DView(true)}
             />
           )}
         </div>
 
-        {/* Right Selected Station Details (~40% -> 5 columns on lg grid) */}
+        {/* Right Selected Station Details */}
         <div className="lg:col-span-5 luxury-card p-6 bg-white border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
           
-          {/* Station Title Header */}
-          <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-start justify-between border-b border-slate-200 pb-3">
             <div>
-              <span className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
-                SELECTED STATION
+              <span className="text-[11px] font-mono font-extrabold text-sky-700 uppercase tracking-widest block">
+                SELECTED STATION TELEMETRY
               </span>
-              <h3 className="text-lg font-extrabold text-slate-900 font-sans tracking-tight uppercase mt-0.5">
+              <h3 className="text-lg font-black text-slate-900 font-display tracking-wider uppercase mt-0.5">
                 {selectedStation.name}
               </h3>
               <p className="text-xs font-mono text-slate-500 mt-0.5">
@@ -236,9 +305,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </p>
             </div>
 
-            {/* Status Normal Pill */}
-            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-xs font-mono font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>NORMAL</span>
             </div>
           </div>
@@ -246,48 +314,51 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {/* 3 Parameter Readout Cards */}
           <div className="grid grid-cols-3 gap-3 font-sans">
             
-            {/* Temperature Tile */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-center">
-              <div className="flex items-center justify-center space-x-1 text-slate-500 text-[11px] font-bold uppercase">
-                <Thermometer className="w-3.5 h-3.5 text-red-500" />
-                <span>TEMPERATURE</span>
+              <div className="flex items-center justify-center space-x-1 text-slate-600 text-[10px] font-mono font-bold uppercase">
+                <Thermometer className="w-3.5 h-3.5 text-red-600" />
+                <span>TEMP</span>
               </div>
-              <div className="text-2xl font-extrabold text-slate-900 font-sans tracking-tight mt-1.5">
-                {currentTemp}°C
+              <div className="text-xl font-extrabold text-slate-900 font-mono tracking-tight mt-1.5">
+                {currentTemp.toFixed(1)}°C
               </div>
-              <div className="text-[10px] font-semibold text-emerald-600 mt-1 flex items-center justify-center space-x-0.5">
-                <TrendingUp className="w-3 h-3 text-emerald-600" />
-                <span>1.2°C vs expected</span>
+              <div className={`text-[10px] font-mono font-bold mt-1 flex items-center justify-center space-x-0.5 ${
+                tempDelta >= 0 ? 'text-emerald-700' : 'text-sky-700'
+              }`}>
+                {tempDelta >= 0 ? <TrendingUp className="w-3 h-3 text-emerald-600" /> : <TrendingDown className="w-3 h-3 text-sky-600" />}
+                <span>{formatDeltaStr(tempDelta, '°C')}</span>
               </div>
             </div>
 
-            {/* Pressure Tile */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-center">
-              <div className="flex items-center justify-center space-x-1 text-slate-500 text-[11px] font-bold uppercase">
-                <Gauge className="w-3.5 h-3.5 text-blue-600" />
+              <div className="flex items-center justify-center space-x-1 text-slate-600 text-[10px] font-mono font-bold uppercase">
+                <Gauge className="w-3.5 h-3.5 text-sky-600" />
                 <span>PRESSURE</span>
               </div>
-              <div className="text-2xl font-extrabold text-slate-900 font-sans tracking-tight mt-1.5">
-                {currentPress} <span className="text-xs font-semibold text-slate-500">hPa</span>
+              <div className="text-xl font-extrabold text-slate-900 font-mono tracking-tight mt-1.5">
+                {currentPress.toFixed(1)} <span className="text-[10px] font-semibold text-slate-500">hPa</span>
               </div>
-              <div className="text-[10px] font-semibold text-blue-600 mt-1 flex items-center justify-center space-x-0.5">
-                <TrendingDown className="w-3 h-3 text-blue-600" />
-                <span>2 hPa vs expected</span>
+              <div className={`text-[10px] font-mono font-bold mt-1 flex items-center justify-center space-x-0.5 ${
+                pressDelta >= 0 ? 'text-emerald-700' : 'text-sky-700'
+              }`}>
+                {pressDelta >= 0 ? <TrendingUp className="w-3 h-3 text-emerald-600" /> : <TrendingDown className="w-3 h-3 text-sky-600" />}
+                <span>{formatDeltaStr(pressDelta, ' hPa')}</span>
               </div>
             </div>
 
-            {/* Humidity Tile */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-center">
-              <div className="flex items-center justify-center space-x-1 text-slate-500 text-[11px] font-bold uppercase">
-                <Droplets className="w-3.5 h-3.5 text-blue-500" />
+              <div className="flex items-center justify-center space-x-1 text-slate-600 text-[10px] font-mono font-bold uppercase">
+                <Droplets className="w-3.5 h-3.5 text-sky-600" />
                 <span>HUMIDITY</span>
               </div>
-              <div className="text-2xl font-extrabold text-slate-900 font-sans tracking-tight mt-1.5">
-                {currentHum}%
+              <div className="text-xl font-extrabold text-slate-900 font-mono tracking-tight mt-1.5">
+                {currentHum.toFixed(1)}%
               </div>
-              <div className="text-[10px] font-semibold text-emerald-600 mt-1 flex items-center justify-center space-x-0.5">
-                <TrendingUp className="w-3 h-3 text-emerald-600" />
-                <span>5% vs expected</span>
+              <div className={`text-[10px] font-mono font-bold mt-1 flex items-center justify-center space-x-0.5 ${
+                humDelta >= 0 ? 'text-emerald-700' : 'text-sky-700'
+              }`}>
+                {humDelta >= 0 ? <TrendingUp className="w-3 h-3 text-emerald-600" /> : <TrendingDown className="w-3 h-3 text-sky-600" />}
+                <span>{formatDeltaStr(humDelta, '%')}</span>
               </div>
             </div>
 
@@ -295,36 +366,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
           {/* Live Sensor Trend Chart */}
           <div className="pt-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-600 mb-2">
-              <span className="uppercase tracking-wider font-mono text-[11px]">LIVE SENSOR TREND (Last 30 Minutes)</span>
-              <div className="flex items-center space-x-3 text-[10px] font-sans">
+            <div className="flex items-center justify-between text-xs font-mono font-bold text-slate-600 mb-2">
+              <span className="uppercase tracking-wider text-[10px] text-sky-700">LIVE SENSOR TREND (LAST 30 MINS)</span>
+              <div className="flex items-center space-x-3 text-[10px]">
                 <span className="flex items-center space-x-1">
                   <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                  <span>Temp (°C)</span>
+                  <span className="text-slate-700">Temp</span>
                 </span>
                 <span className="flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                  <span>Pressure (hPa)</span>
+                  <span className="w-2 h-2 rounded-full bg-sky-600"></span>
+                  <span className="text-slate-700">Press</span>
                 </span>
                 <span className="flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span>Humidity (%)</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                  <span className="text-slate-700">Hum</span>
                 </span>
               </div>
             </div>
 
-            <div className="h-44 w-full bg-slate-50/70 rounded-xl border border-slate-200 p-2">
+            <div className="h-44 w-full bg-slate-50 rounded-xl border border-slate-200 p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#64748b' }} />
                   <YAxis tick={{ fontSize: 10, fill: '#64748b' }} domain={['dataMin - 2', 'dataMax + 2']} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '8px', fontSize: '11px' }} 
+                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '8px', fontSize: '11px', color: '#0f172a' }} 
                   />
-                  <Line type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="temp" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="press" stroke="#0284c7" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="hum" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="hum" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -337,233 +408,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
       {/* ROW 3: TIER 1 & TIER 2 SIDE-BY-SIDE PANELS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-        
-        {/* TIER 1 PANEL */}
-        <div className="luxury-card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center space-x-2 text-blue-600">
-              <ShieldCheck className="w-4 h-4" />
-              <h3 className="font-extrabold text-xs uppercase tracking-wider font-mono">
-                TIER 1 · SENSOR ANOMALY DETECTION
-              </h3>
-            </div>
-          </div>
+        <Tier1DetectionCard
+          selectedStation={selectedStation}
+          currentReading={currentLiveReading}
+          activeAnomaly={selectedStationAnom}
+        />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-            
-            {/* Sub 1: Parameter status list */}
-            <div className="space-y-2.5 font-sans text-xs">
-              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                <span className="flex items-center space-x-2 text-slate-700">
-                  <Thermometer className="w-3.5 h-3.5 text-red-500" />
-                  <span>Temperature</span>
-                </span>
-                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Normal</span>
-              </div>
-
-              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                <span className="flex items-center space-x-2 text-slate-700">
-                  <Gauge className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Pressure</span>
-                </span>
-                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Normal</span>
-              </div>
-
-              <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                <span className="flex items-center space-x-2 text-slate-700">
-                  <Droplets className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Humidity</span>
-                </span>
-                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Normal</span>
-              </div>
-            </div>
-
-            {/* Sub 2: ANOMALY SCORE Arc Meter */}
-            <div className="flex flex-col items-center justify-center p-2 text-center">
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mb-1">
-                ANOMALY SCORE
-              </span>
-              
-              {/* Semi-Circle SVG Gauge */}
-              <div className="relative w-36 h-20 flex items-end justify-center">
-                <svg className="w-36 h-36 transform -rotate-90 overflow-visible" viewBox="0 0 100 100">
-                  <circle 
-                    cx="50" cy="50" r="40" 
-                    stroke="#e2e8f0" strokeWidth="8" 
-                    fill="none" 
-                    strokeDasharray="125 250"
-                  />
-                  <circle 
-                    cx="50" cy="50" r="40" 
-                    stroke="#10b981" strokeWidth="8" 
-                    fill="none" 
-                    strokeDasharray="125 250"
-                    strokeDashoffset="125"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-                  <span className="text-3xl font-extrabold text-slate-900 font-sans tracking-tight leading-none">
-                    0.00
-                  </span>
-                  <span className="text-[11px] font-extrabold text-emerald-600 uppercase tracking-wider mt-1">
-                    NORMAL
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub 3: Detection metadata */}
-            <div className="space-y-2 text-xs font-sans text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div>
-                <span className="text-[10px] text-slate-500 block uppercase font-mono">DETECTION TIME</span>
-                <span className="font-bold text-slate-900 font-mono text-xs">09:42:15 IST</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block uppercase font-mono">CONFIDENCE</span>
-                <span className="font-bold text-emerald-600">100%</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block uppercase font-mono">REASON</span>
-                <span className="text-[11px] text-slate-600 leading-tight block mt-0.5">
-                  All sensor readings within expected operational range.
-                </span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Center Connecting Arrow Icon */}
-        <div className="hidden lg:flex absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white border border-slate-300 shadow-md items-center justify-center text-blue-600">
+        <div className="hidden lg:flex absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white border border-sky-300 shadow-md items-center justify-center text-sky-700">
           <ArrowRight className="w-4 h-4" />
         </div>
 
-        {/* TIER 2 PANEL */}
-        <div className="luxury-card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center space-x-2 text-blue-600">
-              <ShieldAlert className="w-4 h-4" />
-              <h3 className="font-extrabold text-xs uppercase tracking-wider font-mono">
-                TIER 2 · ENVIRONMENTAL RISK INTELLIGENCE
-              </h3>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-            
-            {/* Sub 1: Weather Context */}
-            <div className="space-y-2 font-sans text-xs">
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                WEATHER CONTEXT
-              </span>
-              
-              <div className="space-y-1.5 text-slate-700 text-xs">
-                <div className="flex items-center space-x-2">
-                  <Thermometer className="w-3.5 h-3.5 text-blue-600" />
-                  <span>28°C Temperature</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Droplets className="w-3.5 h-3.5 text-blue-600" />
-                  <span>82% Humidity</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CloudRain className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Light Rain Conditions</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Wind className="w-3.5 h-3.5 text-blue-600" />
-                  <span>18 km/h Wind Speed</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub 2: RISK ASSESSMENT Arc Meter */}
-            <div className="flex flex-col items-center justify-center p-2 text-center">
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mb-1">
-                RISK ASSESSMENT
-              </span>
-
-              {/* Semi-Circle SVG Gauge */}
-              <div className="relative w-36 h-20 flex items-end justify-center">
-                <svg className="w-36 h-36 transform -rotate-90 overflow-visible" viewBox="0 0 100 100">
-                  <circle 
-                    cx="50" cy="50" r="40" 
-                    stroke="#e2e8f0" strokeWidth="8" 
-                    fill="none" 
-                    strokeDasharray="125 250"
-                  />
-                  <circle 
-                    cx="50" cy="50" r="40" 
-                    stroke="#10b981" strokeWidth="8" 
-                    fill="none" 
-                    strokeDasharray="125 250"
-                    strokeDashoffset="125"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-                  <span className="text-3xl font-extrabold text-emerald-600 font-sans tracking-tight leading-none">
-                    LOW
-                  </span>
-                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mt-1">
-                    RISK LEVEL
-                  </span>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1">No immediate environmental threat</p>
-            </div>
-
-            {/* Sub 3: Impact Analysis */}
-            <div className="space-y-2 text-xs font-sans text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                IMPACT ANALYSIS
-              </span>
-              
-              <div className="flex justify-between items-center text-xs py-0.5">
-                <span className="flex items-center space-x-1.5">
-                  <AlertTriangle className="w-3 h-3 text-slate-400" />
-                  <span>Flood Risk</span>
-                </span>
-                <span className="font-bold text-emerald-600">LOW</span>
-              </div>
-
-              <div className="flex justify-between items-center text-xs py-0.5 border-t border-slate-200/60">
-                <span className="flex items-center space-x-1.5">
-                  <Thermometer className="w-3 h-3 text-slate-400" />
-                  <span>Heatwave Risk</span>
-                </span>
-                <span className="font-bold text-emerald-600">LOW</span>
-              </div>
-
-              <div className="flex justify-between items-center text-xs py-0.5 border-t border-slate-200/60">
-                <span className="flex items-center space-x-1.5">
-                  <Wind className="w-3 h-3 text-slate-400" />
-                  <span>Storm Risk</span>
-                </span>
-                <span className="font-bold text-emerald-600">LOW</span>
-              </div>
-
-              <div className="flex justify-between items-center text-xs py-0.5 border-t border-slate-200/60 font-bold">
-                <span className="flex items-center space-x-1.5 text-slate-900">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  <span>Overall Impact</span>
-                </span>
-                <span className="text-emerald-600">MINIMAL</span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
+        <Tier2RiskCard
+          selectedStation={selectedStation}
+          currentReading={currentLiveReading}
+          activeAnomaly={selectedStationAnom}
+        />
       </div>
 
 
       {/* ROW 4: SYSTEM ALERTS BOTTOM BAR */}
       <div className="luxury-card p-4 bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between text-xs font-sans gap-3">
         <div className="flex flex-wrap items-center gap-6">
-          <span className="font-extrabold text-slate-900 uppercase font-mono tracking-wider flex items-center space-x-2">
-            <Activity className="w-4 h-4 text-blue-600" />
+          <span className="font-extrabold text-slate-900 uppercase font-mono tracking-widest flex items-center space-x-2">
+            <Activity className="w-4 h-4 text-sky-600" />
             <span>SYSTEM ALERTS</span>
           </span>
 
@@ -573,41 +440,48 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
 
           <div className="flex items-center space-x-2 text-slate-700 font-medium">
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            <span>No active anomalies in other stations</span>
+            <span className="w-2 h-2 rounded-full bg-sky-600"></span>
+            <span>No active anomalies</span>
           </div>
 
           <div className="flex items-center space-x-2 text-slate-700 font-medium">
-            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            <span>Weather data synced</span>
+            <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+            <span>Weather API synced</span>
           </div>
         </div>
 
         <button
           onClick={() => onNavigateTab('anomalies')}
-          className="text-blue-600 hover:text-blue-800 font-bold font-mono text-xs flex items-center space-x-1 whitespace-nowrap"
+          className="text-sky-700 hover:text-sky-800 font-bold font-mono text-xs flex items-center space-x-1.5 whitespace-nowrap"
         >
-          <span>View All Alerts</span>
+          <span>VIEW ALL ALERTS</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Additional Deep Inspection components when active anomalies exist */}
-      {activeAnomaliesCount > 0 && activeAnomalyRecord && (
-        <div className="space-y-6 pt-4">
-          <div className="section-header">
-            <div className="section-number">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              <span>ACTIVE ANOMALY EXPLAINABILITY</span>
-            </div>
-            <h2 className="section-title">Deep Inspection & SHAP Breakdown</h2>
+      {/* Dynamic SHAP Breakdown & Deep Inspection Section */}
+      <div className="space-y-6 pt-4">
+        <div className="section-header">
+          <div className="section-number">
+            <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
+            <span>REAL-TIME EXPLAINABLE AI</span>
           </div>
-
-          <SHAPChart factors={activeAnomalyRecord.contributing_factors} />
-          <ImputedValueCard imputation={activeAnomalyRecord.imputed_value_suggestion} />
-          <SpatialConsensusPanel spatialVerdict={activeAnomalyRecord.spatial_verdict} />
+          <h2 className="section-title text-slate-900">Deep Inspection & Dynamic SHAP Breakdown</h2>
         </div>
-      )}
+
+        <ShapBreakdown
+          selectedStation={selectedStation}
+          currentReading={currentLiveReading}
+          activeAnomaly={selectedStationAnom}
+        />
+
+        {activeAnomaliesCount > 0 && activeAnomalyRecord && (
+          <>
+            <ImputedValueCard imputation={activeAnomalyRecord.imputed_value_suggestion} />
+            <SpatialConsensusPanel spatialVerdict={activeAnomalyRecord.spatial_verdict} />
+          </>
+        )}
+      </div>
 
     </div>
   );

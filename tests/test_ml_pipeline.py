@@ -3,10 +3,17 @@ tests/test_ml_pipeline.py
 Unit & Integration Test Suite for SkyGuard AI ML Pipeline.
 """
 
-import unittest
+import sys
 import os
+import unittest
 import pandas as pd
 import numpy as np
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from ml.data_loader import OpenMLDataLoader
 from ml.anomaly_detector import Tier1AnomalyDetector
 from ml.explainability import AnomalyExplainer
@@ -19,12 +26,13 @@ class TestMLPipeline(unittest.TestCase):
 
     def test_openml_data_loader(self):
         loader = OpenMLDataLoader()
-        df, stats = loader.prepare_tier1_dataset()
+        df, stats, meta = loader.prepare_combined_tier1_dataset()
         self.assertGreater(len(df), 100)
         self.assertIn("temperature", df.columns)
         self.assertIn("pressure", df.columns)
         self.assertIn("humidity", df.columns)
         self.assertIn("temperature", stats)
+        self.assertGreater(meta["total_combined_rows"], 0)
 
     def test_anomaly_detector_normal(self):
         detector = Tier1AnomalyDetector()

@@ -11,6 +11,8 @@ export interface Reading {
   temperature: number;
   pressure: number;
   humidity: number;
+  wind_speed?: number;
+  rainfall?: number;
   origin: 'SIMULATED' | 'WEATHER_API' | 'SENSOR' | 'OPENML';
   is_simulated_fault?: boolean;
   injected_fault_type?: string;
@@ -79,6 +81,7 @@ export interface StationHealth {
 
 export interface Station {
   station_id: string;
+  id?: string;
   name: string;
   coordinates: Coordinates;
   elevation_m: number;
@@ -95,7 +98,9 @@ export interface Station {
 export interface AnomalyRecord {
   id: string;
   station_id: string;
+  stationId?: string;
   station_name: string;
+  stationName?: string;
   timestamp: string;
   origin: string;
   readings: {
@@ -104,8 +109,10 @@ export interface AnomalyRecord {
     humidity: number;
   };
   is_anomaly: boolean;
+  isAnomaly?: boolean;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   root_cause: string;
+  rootCause?: string;
   confidence: number;
   isolation_forest_score: number;
   spatial_verdict: string;
