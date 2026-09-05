@@ -1,151 +1,154 @@
-import React, { useState } from 'react';
-import { SHAPChart } from '../components/SHAPChart';
-import { ImputedValueCard } from '../components/ImputedValueCard';
-import { SpatialConsensusPanel } from '../components/SpatialConsensusPanel';
-import { Filter } from 'lucide-react';
-import { AnomalyRecord } from '../types';
+import React, { useState, useMemo } from 'react';
+import { AnomaliesFeed } from '../components/AnomaliesFeed';
+import { AnomaliesView } from '../components/AnomaliesView';
+import { AnomalyRecord, DisasterRiskSummary } from '../types';
+import { useSkyGuardStore } from '../store/useSkyGuardStore';
 
 interface AnomaliesPageProps {
   anomalies: AnomalyRecord[];
+  risks?: DisasterRiskSummary;
 }
 
-export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ anomalies }) => {
-  const [selectedAnomalyId, setSelectedAnomalyId] = useState<string>(anomalies[0]?.id || 'ANOM_2026_001');
-  const [filterSeverity, setFilterSeverity] = useState<string>('ALL');
+export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ anomalies = [], risks }) => {
+  const storeRisks = useSkyGuardStore((state) => state.disasterRisks);
+  const storeSelectedId = useSkyGuardStore((state) => state.selectedAnomalyId);
+  const storeHistorical = useSkyGuardStore((state) => state.historicalAnomalies);
+  const setSelectedAnomalyIdInStore = useSkyGuardStore((state) => state.setSelectedAnomalyId);
 
-  const selectedAnomaly = anomalies.find(a => a.id === selectedAnomalyId) || anomalies[0];
-  const filteredAnomalies = anomalies.filter(a => filterSeverity === 'ALL' || a.severity === filterSeverity);
+  const effectiveRisks = risks || storeRisks;
+
+  const [selectedAnomalyId, setSelectedAnomalyId] = useState<string>(storeSelectedId || '');
+  const [filterSeverity, setFilterSeverity] = useState<string>('ALL');
+  const [archivedAnomaly, setArchivedAnomaly] = useState<AnomalyRecord | null>(null);
+
+  // Sync when storeSelectedId changes externally (e.g. from sidebar or navbar deep link)
+  React.useEffect(() => {
+    if (storeSelectedId) {
+      setSelectedAnomalyId(storeSelectedId);
+    }
+  }, [storeSelectedId]);
+
+  const handleSelectAnomaly = (id: string) => {
+    setSelectedAnomalyId(id);
+    setSelectedAnomalyIdInStore(id);
+  };
+
+  const filteredAnomalies = useMemo(() => {
+    return (anomalies || []).filter(a => filterSeverity === 'ALL' || a.severity === filterSeverity);
+  }, [anomalies, filterSeverity]);
+
+  const activeId = useMemo(() => {
+    if (selectedAnomalyId) {
+      return selectedAnomalyId;
+    }
+    return filteredAnomalies[0]?.id || '';
+  }, [selectedAnomalyId, filteredAnomalies]);
+
+  // Attempt to resolve selected anomaly from filtered feed, full active feed, or historical archive
+  const selectedAnomaly = useMemo(() => {
+    if (!activeId) return filteredAnomalies[0];
+    
+    // 1. Check in filtered active feed
+    const fromFiltered = filteredAnomalies.find(a => a.id === activeId);
+    if (fromFiltered) return fromFiltered;
+
+    // 2. Check in all active anomalies (if filter is active)
+    const fromActive = anomalies.find(a => a.id === activeId);
+    if (fromActive) return fromActive;
+
+    // 3. Check in local store historical list
+    const fromHistory = storeHistorical.find(a => a.id === activeId);
+    if (fromHistory) {
+      return { ...fromHistory, is_historical: true };
+    }
+
+    // 4. Fall back to archived record fetched asynchronously if matching
+    if (archivedAnomaly && archivedAnomaly.id === activeId) {
+      return archivedAnomaly;
+    }
+
+    return filteredAnomalies[0] || null;
+  }, [filteredAnomalies, anomalies, storeHistorical, activeId, archivedAnomaly]);
+
+  // If activeId is not in memory, query backend API endpoint /api/anomalies/{anomaly_id}
+  React.useEffect(() => {
+    if (activeId && !filteredAnomalies.some(a => a.id === activeId) && !storeHistorical.some(a => a.id === activeId)) {
+      fetch(`/api/anomalies/${activeId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.anomaly) {
+            setArchivedAnomaly({ ...data.anomaly, is_historical: true });
+          }
+        })
+        .catch(err => console.warn('[AnomaliesPage] History fetch warning:', err));
+    }
+  }, [activeId, filteredAnomalies, storeHistorical]);
+
+  const compRisk = effectiveRisks?.composite_risk_level || 'LOW';
+  const hazards = effectiveRisks?.hazards;
 
   return (
     <div className="space-y-8 pb-12 font-sans text-slate-900">
       
-      {/* Header */}
-      <div className="section-header">
-        <div className="section-number">
-          <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-          <span>TIER 1 CORE ANOMALY ENGINE</span>
+      {/* Header Banner */}
+      <div className="section-header flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div className="section-number">
+            <span className="w-2 h-2 rounded-full bg-sky-600 animate-pulse"></span>
+            <span>TIER 1 CORE ANOMALY ENGINE & TIER 2 RISK INTELLIGENCE</span>
+          </div>
+          <h1 className="section-title text-slate-900">Multivariate Anomaly Identification & SHAP Studio</h1>
+          <p className="section-subtitle text-slate-600">
+            Real-time detection operating strictly on Temperature (°C), Pressure (hPa), and Relative Humidity (%).
+            Every flagged anomaly includes mandatory SHAP feature contribution analysis, sensor degradation signals, physics-based imputation, and spatial consensus verification.
+          </p>
         </div>
-        <h1 className="section-title">Multivariate Anomaly Identification & Explainability Studio</h1>
-        <p className="section-subtitle">
-          Real-time detection operating strictly on Temperature (°C), Pressure (hPa), and Relative Humidity (%).
-          Every flagged anomaly includes mandatory SHAP feature contributions, physics-based imputation, and spatial consensus verification.
-        </p>
+
+        {/* Live Risk Intelligence Quick Summary Badge */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm font-mono text-xs space-y-2 min-w-[260px]">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-[10px] text-slate-500 font-bold uppercase">COMPOSITE HAZARD RISK</span>
+            <span className={`font-black px-2.5 py-0.5 rounded-full text-xs ${
+              compRisk === 'CRITICAL' || compRisk === 'HIGH' ? 'bg-red-100 text-red-700 border border-red-200' : compRisk === 'MEDIUM' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+            }`}>
+              {compRisk}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px] pt-0.5 text-center">
+            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <span className="text-[9px] text-slate-500 block">FLOOD</span>
+              <strong className="text-sky-700">{hazards?.flood?.risk_level || 'LOW'}</strong>
+            </div>
+            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <span className="text-[9px] text-slate-500 block">HEAT</span>
+              <strong className="text-amber-700">{hazards?.heatwave?.risk_level || 'LOW'}</strong>
+            </div>
+            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <span className="text-[9px] text-slate-500 block">CYCLONE</span>
+              <strong className="text-emerald-700">{hazards?.cyclone?.risk_level || 'LOW'}</strong>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Equal-Height Two-Column Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch lg:h-[calc(100vh-14.5rem)] lg:min-h-[660px]">
         
-        {/* Left Column: Flagged Anomaly Feed */}
-        <div className="luxury-card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="font-extrabold text-sm text-slate-900 font-display uppercase tracking-wider">Flagged Anomaly Feed</h3>
-            
-            {/* Filter */}
-            <div className="flex items-center space-x-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-              <Filter className="w-3.5 h-3.5 text-blue-600" />
-              <select
-                value={filterSeverity}
-                onChange={(e) => setFilterSeverity(e.target.value)}
-                className="text-xs bg-transparent font-mono font-bold text-slate-700 border-none focus:outline-none cursor-pointer"
-              >
-                <option value="ALL" className="bg-white text-slate-900">ALL SEVERITIES</option>
-                <option value="CRITICAL" className="bg-white text-red-600">CRITICAL</option>
-                <option value="HIGH" className="bg-white text-amber-600">HIGH</option>
-                <option value="MEDIUM" className="bg-white text-blue-600">MEDIUM</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
-            {filteredAnomalies.map((anom) => {
-              const isSelected = anom.id === selectedAnomalyId;
-              return (
-                <div
-                  key={anom.id}
-                  onClick={() => setSelectedAnomalyId(anom.id)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
-                    isSelected
-                      ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-100 shadow-sm'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900 font-sans">{anom.station_name}</span>
-                    <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
-                      anom.severity === 'CRITICAL' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
-                    }`}>
-                      {anom.severity}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-slate-600 flex items-center justify-between font-mono">
-                    <span>ROOT CAUSE: <span className="font-semibold text-slate-900">{anom.root_cause}</span></span>
-                    <span className="text-blue-600 font-bold">CONF: {Math.round(anom.confidence * 100)}%</span>
-                  </div>
-
-                  <div className="text-xs text-slate-700 font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex justify-between">
-                    <span>T: <strong className="text-slate-900">{anom.readings.temperature}°C</strong></span>
-                    <span>P: <strong className="text-slate-900">{anom.readings.pressure}hPa</strong></span>
-                    <span>RH: <strong className="text-slate-900">{anom.readings.humidity}%</strong></span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Left Column: Deduplicated Flagged Anomaly Feed */}
+        <div className="lg:col-span-4 xl:col-span-4 min-w-0 h-full flex flex-col">
+          <AnomaliesFeed
+            anomalies={filteredAnomalies}
+            activeId={activeId}
+            onSelectAnomaly={handleSelectAnomaly}
+            filterSeverity={filterSeverity}
+            onFilterChange={setFilterSeverity}
+          />
         </div>
 
-        {/* Right 2 Columns: Selected Anomaly Full Inspection */}
-        {selectedAnomaly && (
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Top Detail Card */}
-            <div className="luxury-card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
-                <div>
-                  <span className="text-xs font-mono font-bold text-blue-600 tracking-wider">{selectedAnomaly.id}</span>
-                  <h2 className="text-xl font-black text-slate-900 font-display uppercase tracking-wide mt-0.5">{selectedAnomaly.station_name}</h2>
-                  <span className="text-xs font-mono text-slate-500">TIMESTAMP: {new Date(selectedAnomaly.timestamp).toLocaleString()}</span>
-                </div>
-                <div className="text-left sm:text-right font-mono">
-                  <span className={`text-xs font-black px-3 py-1 rounded-full border inline-block ${
-                    selectedAnomaly.severity === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {selectedAnomaly.severity} SEVERITY
-                  </span>
-                  <div className="text-xs text-slate-500 mt-1">
-                    CALIBRATED CONFIDENCE: <span className="font-bold text-blue-600">{Math.round(selectedAnomaly.confidence * 100)}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Readout Parameter Values Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <span className="text-xs text-slate-500 uppercase block font-semibold">Temperature Reading</span>
-                  <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.temperature} °C</span>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <span className="text-xs text-slate-500 uppercase block font-semibold">Pressure Reading</span>
-                  <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.pressure} hPa</span>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <span className="text-xs text-slate-500 uppercase block font-semibold">Humidity Reading</span>
-                  <span className="text-xl font-black text-slate-900 mt-1 block">{selectedAnomaly.readings.humidity} %</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Mandatory SHAP Feature Contributions Chart */}
-            <SHAPChart factors={selectedAnomaly.contributing_factors} />
-
-            {/* Imputed Value Suggestion */}
-            <ImputedValueCard imputation={selectedAnomaly.imputed_value_suggestion} />
-
-            {/* Spatial Consistency Consensus Panel */}
-            <SpatialConsensusPanel spatialVerdict={selectedAnomaly.spatial_verdict} />
-
-          </div>
-        )}
+        {/* Right Column: Selected Anomaly Inspection Workspace */}
+        <div className="lg:col-span-8 xl:col-span-8 min-w-0 h-full overflow-y-auto pr-2 pb-2 custom-feed-scrollbar">
+          <AnomaliesView selectedAnomaly={selectedAnomaly} />
+        </div>
 
       </div>
     </div>
