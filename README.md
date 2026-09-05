@@ -104,36 +104,39 @@ SkyGuard AI renders the entire AWS station mesh as an **interactive, collision-f
 
 ```mermaid
 flowchart TB
-    subgraph DataLayer [Data Ingestion & OpenML Goa 43409]
-        D1[OpenML 43409 108K Hourly Records] --> D2[Chronological 80/20 Zero-Leak Split]
-        D2 --> D3[Feature Scaling & Diurnal Baselines]
+    subgraph DataLayer ["Data Ingestion & OpenML Goa 43409"]
+        D1["OpenML 43409 (108K Hourly Records)"] --> D2["Chronological 80/20 Zero-Leak Split"]
+        D2 --> D3["Feature Scaling & Diurnal Baselines"]
     end
 
-    subgraph MLLayer [Machine Learning & Explainability Core]
-        D3 --> ML1[IsolationForest Contamination=0.05]
-        ML1 --> ML2[TreeSHAP Feature Explainer]
-        ML1 --> ML3[Physics Spatio-Temporal Imputer]
-        ML1 --> ML4[Spatial Consensus Engine 50km]
-        ML1 --> ML5[Quantized ONNX Export 90.14 KB]
+    subgraph MLLayer ["Machine Learning & Explainability Core"]
+        D3 --> ML1["IsolationForest (Contamination=0.05)"]
+        ML1 --> ML2["TreeSHAP Feature Explainer"]
+        ML1 --> ML3["Physics Spatio-Temporal Imputer"]
+        ML1 --> ML4["Spatial Consensus Engine (50km)"]
+        ML1 --> ML5["Quantized ONNX Export (90.14 KB)"]
     end
 
-    subgraph BackendLayer [FastAPI Async Core & WebSockets]
-        ML1 & ML2 & ML3 & ML4 --> B1[FastAPI REST Router]
-        B1 --> B2[WebSocket Broadcaster /ws/readings]
-        B1 --> B3[Virtual AWS Hardware Simulator]
+    subgraph BackendLayer ["FastAPI Async Core & WebSockets"]
+        ML1 --> B1["FastAPI REST Router"]
+        ML2 --> B1
+        ML3 --> B1
+        ML4 --> B1
+        B1 --> B2["WebSocket Broadcaster (/ws/readings)"]
+        B1 --> B3["Virtual AWS Hardware Simulator"]
     end
 
-    subgraph FrontendLayer [Modern React 18 Light Command Center]
-        B2 --> F1[Zustand In-Place Deduplication Store]
-        F1 --> F2[2D Neural Topology Graph]
-        F1 --> F3[Tier 1 & Tier 2 Framer Motion Cards]
-        F1 --> F4[Real-Time Anomaly Feed & SHAP Studio]
-        F1 --> F5[Simulator Control Studio]
+    subgraph FrontendLayer ["Modern React 18 Light Command Center"]
+        B2 --> F1["Zustand In-Place Deduplication Store"]
+        F1 --> F2["2D Neural Topology Graph"]
+        F1 --> F3["Tier 1 & Tier 2 Framer Motion Cards"]
+        F1 --> F4["Real-Time Anomaly Feed & SHAP Studio"]
+        F1 --> F5["Simulator Control Studio"]
     end
 
-    subgraph EdgeLayer [Edge AI Microcontroller Spec]
-        ML5 --> E1[Simulated ESP32 / Cortex-M4 Deploy]
-        E1 --> E2[8.08ms Latency | <128KB RAM]
+    subgraph EdgeLayer ["Edge AI Microcontroller Spec"]
+        ML5 --> E1["Simulated ESP32 / Cortex-M4 Deploy"]
+        E1 --> E2["8.08ms Latency • Under 128KB RAM"]
     end
 ```
 
