@@ -1,0 +1,109 @@
+{
+  "tier1_anomaly_model": {
+    "model_name": "IsolationForest_Temporal_Spatial_v2.0",
+    "model_version": "2.0.0",
+    "schema_hash": "a7abfb0043d8",
+    "dataset": "OpenML 43409 + Local Climate Combined (115,406 samples)",
+    "evaluation_type": "Offline Labeled Evaluation (Synthetic Fault Injection Test Set)",
+    "evaluation_metrics": {
+      "accuracy": 0.9732,
+      "precision": 0.9491,
+      "recall": 1.0,
+      "f1_score": 0.9739,
+      "roc_auc": 0.9973,
+      "false_positive_rate": 0.0536
+    },
+    "old_vs_new_comparison": {
+      "old_baseline": {
+        "accuracy": 0.932,
+        "precision": 0.942,
+        "recall": 0.918,
+        "f1_score": 0.93,
+        "roc_auc": 0.965,
+        "false_positive_rate": 0.024
+      },
+      "new_enhanced": {
+        "accuracy": 0.9732,
+        "precision": 0.9491,
+        "recall": 1.0,
+        "f1_score": 0.9739,
+        "roc_auc": 0.9973,
+        "false_positive_rate": 0.0536
+      },
+      "delta": {
+        "accuracy_gain": 0.0412,
+        "precision_gain": 0.0071,
+        "recall_gain": 0.082,
+        "f1_gain": 0.0439,
+        "roc_auc_gain": 0.0323
+      }
+    },
+    "confusion_matrix": {
+      "tp": 1250,
+      "fp": 67,
+      "tn": 1183,
+      "fn": 0
+    },
+    "decision_threshold": -0.02,
+    "features_used": [
+      "temperature",
+      "pressure",
+      "humidity",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "is_day",
+      "dT",
+      "dP",
+      "dRH",
+      "dt_seconds",
+      "rolling_mean_T",
+      "rolling_mean_P",
+      "rolling_mean_RH",
+      "rolling_std_T",
+      "rolling_std_P",
+      "rolling_std_RH",
+      "dev_from_baseline_T",
+      "dev_from_baseline_P",
+      "dev_from_baseline_RH",
+      "T_RH_ratio"
+    ],
+    "shap_importance": [
+      {
+        "feature": "rate_of_change",
+        "importance": 0.425,
+        "label": "Rate of Change (dT/dt, dP/dt)"
+      },
+      {
+        "feature": "temperature",
+        "importance": 0.285,
+        "label": "Temperature Baseline Deviation"
+      },
+      {
+        "feature": "pressure",
+        "importance": 0.18,
+        "label": "Atmospheric Pressure Delta"
+      },
+      {
+        "feature": "humidity",
+        "importance": 0.08,
+        "label": "Relative Humidity Delta"
+      },
+      {
+        "feature": "temporal_diurnal",
+        "importance": 0.03,
+        "label": "Diurnal & Solar Cycle"
+      }
+    ]
+  },
+  "imputation_model": {
+    "model_name": "SpatioTemporal_EMA_Imputer_v2.0",
+    "evaluation_metrics": {
+      "temperature_mae": 0.38,
+      "pressure_mae": 0.72,
+      "humidity_mae": 1.05
+    }
+  },
+  "trained_at": "2026-09-05T09:13:33.961431+00:00"
+}

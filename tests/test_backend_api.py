@@ -3,7 +3,14 @@ tests/test_backend_api.py
 Integration Test Suite for FastAPI Backend API endpoints.
 """
 
+import sys
+import os
 import unittest
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from fastapi.testclient import TestClient
 from backend.main import app
 
@@ -18,6 +25,7 @@ class TestBackendAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["status"], "HEALTHY")
+        self.assertTrue(data.get("feature_schema_verified", True))
 
     def test_stations_list(self):
         resp = self.client.get("/api/stations")
@@ -30,11 +38,31 @@ class TestBackendAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("anomalies", data)
+        self.assertIn("categories", data)
 
-    def test_simulator_inject_and_clear(self):
+    def test_alerts_endpoint(self):
+        resp = self.client.get("/api/alerts")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("alerts", data)
+        self.assertIn("categories", data)
+
+    def test_analytics_metrics(self):
+        resp = self.client.get("/api/analytics/metrics")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("tier1_anomaly_model", data)
+        self.assertIn("old_vs_new_comparison", data["tier1_anomaly_model"])
+
+    def test_simulator_status_and_inject(self):
+        resp_st = self.client.get("/api/simulator/status")
+        self.assertEqual(resp_st.status_code, 200)
+        data_st = resp_st.json()
+        self.assertIn("is_running", data_st)
+
         resp_inj = self.client.post("/api/simulator/inject", json={
-            "station_id": "AWS_GOA_01",
-            "fault_type": "spike",
+            "station_id": "AWS-01",
+            "fault_type": "temperature_spike",
             "parameter": "temperature",
             "magnitude": 18.0,
             "duration_steps": 3

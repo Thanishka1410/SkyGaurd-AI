@@ -1,0 +1,33 @@
+{
+  "model_version": "2.0.0",
+  "schema_hash": "a7abfb0043d8",
+  "feature_count": 22,
+  "feature_names": [
+    "temperature",
+    "pressure",
+    "humidity",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "is_day",
+    "dT",
+    "dP",
+    "dRH",
+    "dt_seconds",
+    "rolling_mean_T",
+    "rolling_mean_P",
+    "rolling_mean_RH",
+    "rolling_std_T",
+    "rolling_std_P",
+    "rolling_std_RH",
+    "dev_from_baseline_T",
+    "dev_from_baseline_P",
+    "dev_from_baseline_RH",
+    "T_RH_ratio"
+  ],
+  "trained_samples": 80000,
+  "contamination": 0.035,
+  "decision_threshold": -0.08,
+  "trained_at": "2026-09-05T09:13:31.712942+00:00"
+}

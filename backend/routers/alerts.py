@@ -1,13 +1,15 @@
 """
 backend/routers/alerts.py
 Alert Engine and Notification Management router for SkyGuard AI.
-Handles alert generation, cooldown suppression, acknowledgement, and resolution.
+Handles alert generation, cooldown suppression, acknowledgement, and resolution
+across 3 distinct alert categories: Sensor Faults, Weather Hazards, and Communication Failures.
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import datetime
+from backend.services.comm_monitor import comm_monitor
 
 router = APIRouter(prefix="/alerts", tags=["Alert Engine"])
 
@@ -35,15 +37,55 @@ SAMPLE_ALERTS = [
         "timestamp": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10)).isoformat(),
         "status": "ACTIVE",
         "cooldown_active": True
+    },
+    {
+        "alert_id": "ALT_2026_103",
+        "station_id": "AWS-IND-MUM",
+        "station_name": "Mumbai Coastal AWS",
+        "category": "COMMUNICATION_FAILURE",
+        "title": "Station Transmission Dropout",
+        "severity": "CRITICAL",
+        "message": "No telemetry packet received from Mumbai Coastal AWS for > 3 minutes.",
+        "timestamp": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=3)).isoformat(),
+        "status": "ACTIVE",
+        "cooldown_active": False
     }
 ]
 
 
 @router.get("")
-async def list_alerts(status: str = "ACTIVE"):
+async def list_alerts(status: str = "ACTIVE", category: Optional[str] = None):
+    """
+    Returns alerts filtered by status and category (SENSOR_FAULT, WEATHER_HAZARD, COMMUNICATION_FAILURE).
+    """
+    alerts = list(SAMPLE_ALERTS)
+    
+    # Add active communication failures from monitor
+    for cf in comm_monitor.active_comm_failures:
+        alerts.insert(0, {
+            "alert_id": cf["id"],
+            "station_id": cf["station_id"],
+            "station_name": cf.get("station_name", cf["station_id"]),
+            "category": "COMMUNICATION_FAILURE",
+            "title": f"Communication Failure: {cf['failure_type']}",
+            "severity": cf["severity"],
+            "message": cf["why_detected"],
+            "timestamp": cf["timestamp"],
+            "status": "ACTIVE",
+            "cooldown_active": False
+        })
+
+    filtered = [
+        a for a in alerts
+        if (status == "ALL" or a["status"] == status) and
+           (category is None or category == "ALL" or a.get("category") == category)
+    ]
+
     return {
-        "count": len(SAMPLE_ALERTS),
-        "alerts": [a for a in SAMPLE_ALERTS if status == "ALL" or a["status"] == status]
+        "count": len(filtered),
+        "total_active": len([a for a in alerts if a["status"] == "ACTIVE"]),
+        "categories": ["SENSOR_FAULT", "WEATHER_HAZARD", "COMMUNICATION_FAILURE"],
+        "alerts": filtered
     }
 
 
