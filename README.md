@@ -11,39 +11,33 @@
 
 ---
 
-## 📸 Executive Command Dashboard
-
-![SkyGuard AI Interface](https://raw.githubusercontent.com/Umesh-369/SkyGaurd-AI/main/docs/dashboard_preview.png)
-
----
-
 ## ✨ Key Features & Capability Matrix
 
 ### 🛡️ Tier 1 Core: AWS Anomaly Detection & Isolation
-* **Multivariate IsolationForest & Trend Model**: Trained strictly on essential AWS parameters — **Temperature (°C)**, **Atmospheric Pressure (hPa)**, and **Relative Humidity (%)**.
+* **Multivariate IsolationForest & Diurnal Evaluator**: Trained strictly on essential AWS parameters — **Temperature (°C)**, **Atmospheric Pressure (hPa)**, and **Relative Humidity (%)**.
 * **Zero Temporal Leak Split**: Chronologically partitioned (80% Train / 20% Test) on 108,096 hourly Goa weather records from **OpenML Dataset 43409**.
+* **Canonical Goa Sector Alignment**: Station network maps strictly to 4 primary canonical Goa AWS nodes (`Panaji Coastal Station AWS-01`, `Margao Inland Station AWS-02`, `Vasco Port Station AWS-03`, `Mapusa North Station AWS-04`) along with major regional climate hubs.
 * **SHAP Explainability Studio**: Explains exact numerical feature contributions for every flagged anomaly (TreeExplainer breakdown).
-* **Physics-Guided Value Imputation**: Automatically suggests corrected sensor readings based on atmospheric lapse rates and spatial gradients when sensor drift or spikes occur.
+* **Physics-Guided Value Imputation**: Automatically suggests corrected sensor readings based on atmospheric lapse rates and spatio-temporal EMA when sensor drift or spikes occur.
 * **Spatial Consistency Engine**: Cross-corroborates sensor anomalies against neighboring AWS nodes within a 50km radius to distinguish between isolated sensor hardware faults and genuine severe weather events.
 
 ### ⚡ Tier 2 Extended: Disaster Risk Intelligence
-* **Composite Threat Scoring**: Fuses validated Tier 1 telemetry with Open-Meteo Weather API rainfall and storm vectors.
+* **Composite Threat Scoring**: Fuses validated Tier 1 telemetry with weather API rainfall and wind vectors.
 * **Multi-Hazard Vulnerability Models**:
   * 🌊 **Coastal Flood & Rain Risk**
   * 🌡️ **Heatwave Thermal Stress Index**
   * 🌀 **Cyclone & Severe Storm Surge Risk**
 
-### 🎮 Virtual AWS Hardware Simulator
-* **Interactive Fault Injector**: Simulates physical sensor degradation mode in real-time:
-  * ⚡ **Spike Fault**: Instant single-cycle rate-of-change offset.
-  * 🧊 **Frozen / Stuck Sensor**: Zero-variance flatline reading.
-  * 📈 **Bias Drift**: Cumulative linear calibration shift.
-  * 📡 **Telemetry Packet Loss**: Dropout and missing payload handling.
+### 🧠 2D Neural Network Topology Graph
+* **3-Layer Synaptic Topology**: Renders station nodes across Input (Goa), Processing (Regional), and Aggregation (Metropolitan) layers with generous, collision-free node spacing.
+* **Animated Streaming Pulses**: Features real-time SVG signal pulses (`<animateMotion>`) streaming along curved synaptic pathways.
+* **Floating Glass Inspection Cards**: Hovering over nodes highlights connected edges and displays floating cards with live Temp, Pressure, Humidity, and Operational Status.
 
-### 💻 Modern Light-Theme Command Center UI
-* **Interactive Spatial Maps**: WebGL 3D terrain viewer & 2D tactical canvas with spatial node overlays.
-* **Live Telemetry Trend Analysis**: Real-time multi-variable streaming line charts (Recharts).
-* **Live IST System Clock & WebSockets**: Low-latency sensor streaming for immediate alert notifications.
+### 🎨 Micro-Animations & Dynamic Motion System
+* **Framer Motion Progress Rings**: Smooth SVG gauge sweep transitions for Anomaly & Risk scores.
+* **Dynamic Glow & Pulse**: Soft crimson drop-shadow glow (`drop-shadow-[0_0_12px_rgba(239,68,68,0.55)]`) on critical anomaly triggers.
+* **Spring Score Count-Up**: Numerical scores tick up smoothly via `useSpring` physics.
+* **AnimatePresence Threat Stream**: Smooth slide-and-fade arrival transitions for real-time threat alert text.
 
 ---
 
@@ -70,7 +64,7 @@
                      v                                                                 v
 +------------------------------------------+                       +------------------------------------------+
 |       React + Vite Light Command UI      |                       |    Quantized ONNX Edge AI Binary Spec   |
-| (3D/2D Spatial Mesh, Gauges, Recharts)   |                       |    (90.14 KB, 8.08ms Latency on ESP32)   |
+| (2D Neural Topology Graph, Framer Gauges)|                       |    (90.14 KB, 8.08ms Latency on ESP32)   |
 +------------------------------------------+                       +------------------------------------------+
 ```
 
@@ -96,7 +90,7 @@
 ### Prerequisites
 * **Node.js** (v18+)
 * **Python** (v3.11+)
-* **Docker & Docker Compose** (Optional, for containerized run)
+* **Docker & Docker Compose** (Optional)
 
 ### 1️⃣ Local Installation
 
@@ -137,40 +131,6 @@ npm run dev
 ```
 
 Open your browser at `http://localhost:5173`.
-
----
-
-## 🐳 Docker Deployment
-
-To run the entire system with Docker Compose:
-
-```bash
-docker-compose up --build -d
-```
-
----
-
-## 📂 Project Repository Structure
-
-```
-SkyGaurd-AI/
-├── backend/                  # FastAPI Application & WebSocket Streamers
-│   ├── main.py               # REST API & WebSocket Routing
-│   ├── anomaly_engine.py     # IsolationForest & SHAP Explainer
-│   └── risk_engine.py        # Tier 2 Environmental Threat Predictor
-├── frontend/                 # React + Vite + Tailwind CSS Application
-│   ├── src/
-│   │   ├── components/       # UI Components (Sidebar, Navbar, Maps, Gauges)
-│   │   ├── pages/            # Dashboard, Anomalies, Simulator, Risk, Analytics
-│   │   ├── App.tsx           # App Root & WebSocket Manager
-│   │   └── index.css         # Light Theme Styling Tokens
-├── ml/                       # Machine Learning Artifacts & Training
-│   ├── data/                 # Goa OpenML 43409 Historical Dataset
-│   └── artifacts/            # Trained Models & ONNX Lite Binary
-├── simulator/                # Sensor Degradation Injection Engine
-├── docker-compose.yml        # Docker Orchestration Configuration
-└── README.md                 # Project Documentation
-```
 
 ---
 

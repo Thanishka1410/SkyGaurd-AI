@@ -11,23 +11,44 @@ export interface Reading {
   temperature: number;
   pressure: number;
   humidity: number;
+  wind_speed?: number;
+  rainfall?: number;
   origin: 'SIMULATED' | 'WEATHER_API' | 'SENSOR' | 'OPENML';
   is_simulated_fault?: boolean;
   injected_fault_type?: string;
   anomaly_evaluation?: AnomalyEvaluation;
   contributing_factors?: SHAPFactor[];
   imputed_suggestion?: ImputedSuggestion;
+  inference_latency_ms?: number;
 }
 
 export interface AnomalyEvaluation {
   is_anomaly: boolean;
+  status?: 'Normal' | 'Anomaly' | 'Communication Failure';
+  category?: 'SENSOR_FAULT' | 'GENUINE_WEATHER_EVENT' | 'COMMUNICATION_FAILURE' | 'NOMINAL';
+  type?: 'Temperature' | 'Pressure' | 'Humidity' | 'Multi-sensor' | 'Communication' | 'Telemetry';
   confidence: number;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   root_cause: string;
+  interpretation?: 'Likely Sensor Fault' | 'Genuine Weather Event' | 'Communication Failure' | 'Requires Investigation';
+  why_detected?: string;
   spatial_verdict: string;
   isolation_forest_score: number;
+  decision_threshold?: number;
   model_name: string;
   model_version: string;
+  narrative_pack?: {
+    parameter?: string;
+    observed?: string;
+    expected?: string;
+    deviation?: string;
+    top_shap_contributors?: string;
+    multi_sensor_status?: Record<string, string>;
+    nearby_stations_status?: string;
+    confidence?: string;
+    interpretation?: string;
+    reason_narrative?: string;
+  };
 }
 
 export interface SHAPFactor {
@@ -52,16 +73,16 @@ export interface SpatialConsensus {
   verdict: string;
   is_corroborated: boolean;
   neighbor_count: number;
-  distance_weighted_neighbor_avg: {
+  distance_weighted_neighbor_avg?: {
     temperature: number;
     pressure: number;
     humidity: number;
   };
-  deltas: {
+  deltas?: {
     temp_delta: number;
     press_delta: number;
   };
-  explanation: string;
+  explanation?: string;
 }
 
 export interface StationHealth {
@@ -79,6 +100,7 @@ export interface StationHealth {
 
 export interface Station {
   station_id: string;
+  id?: string;
   name: string;
   coordinates: Coordinates;
   elevation_m: number;
@@ -95,20 +117,31 @@ export interface Station {
 export interface AnomalyRecord {
   id: string;
   station_id: string;
+  stationId?: string;
   station_name: string;
+  stationName?: string;
   timestamp: string;
   origin: string;
+  status?: 'Normal' | 'Anomaly' | 'Communication Failure';
+  category?: 'SENSOR_FAULT' | 'GENUINE_WEATHER_EVENT' | 'COMMUNICATION_FAILURE';
+  type?: 'Temperature' | 'Pressure' | 'Humidity' | 'Multi-sensor' | 'Communication' | 'Telemetry';
   readings: {
     temperature: number;
     pressure: number;
     humidity: number;
   };
   is_anomaly: boolean;
+  isAnomaly?: boolean;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   root_cause: string;
-  confidence: number;
+  rootCause?: string;
+  confidence?: number | null;
+  is_deterministic?: boolean;
+  is_historical?: boolean;
   isolation_forest_score: number;
   spatial_verdict: string;
+  interpretation?: 'Likely Sensor Fault' | 'Genuine Weather Event' | 'Communication Failure' | 'Requires Investigation';
+  why_detected?: string;
   contributing_factors: SHAPFactor[];
   imputed_value_suggestion?: ImputedSuggestion;
 }
@@ -136,7 +169,7 @@ export interface AlertItem {
   alert_id: string;
   station_id: string;
   station_name: string;
-  category: string;
+  category: 'SENSOR_FAULT' | 'WEATHER_HAZARD' | 'COMMUNICATION_FAILURE' | string;
   title: string;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   message: string;
